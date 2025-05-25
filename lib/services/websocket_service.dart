@@ -8,30 +8,83 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../changelog_handler.dart';
 import '../notification_handler.dart';
 
+/// Represents the connection state of the WebSocket
+enum WebSocketConnectionState {
+  connected,
+  disconnected,
+  reconnecting,
+}
+
 final websocketService = GetIt.I<WebSocketService>();
 
 /// Encapsulates WebSocket client creation with token auth and requestIds.
 class WebSocketService {
-  bool _connected = true;
+  bool _connected = false;
   bool get isConnected => _connected;
-  final WebSocketChannel channel;
+  WebSocketChannel? _channel;
   final _uuid = Uuid();
   final _pending = <String, Completer<Map<String, dynamic>>>{};
-  final Stream<dynamic> messages;
+  late Stream<dynamic> messages;
+  final String _url;
+  final String _token;
+  final _connectionController =
+      StreamController<WebSocketConnectionState>.broadcast();
 
-  WebSocketService._(this.channel)
-      : messages = channel.stream.asBroadcastStream() {
-    // listen for responses
-    messages.listen(_handleMessage);
+  /// Stream of connection state changes
+  Stream<WebSocketConnectionState> get connectionState =>
+      _connectionController.stream;
+
+  /// Stream of connection errors
+  final _errorController = StreamController<dynamic>.broadcast();
+  Stream<dynamic> get connectionError => _errorController.stream;
+
+  WebSocketService._(this._url, this._token) {
+    _connect();
+  }
+
+  void _connect() {
+    try {
+      final uri = Uri.parse('$_url?token=$_token');
+      _channel = IOWebSocketChannel.connect(uri);
+      messages = _channel!.stream.asBroadcastStream();
+      _connected = true;
+      _connectionController.add(WebSocketConnectionState.connected);
+
+      // Listen for messages
+      messages.listen(
+        _handleMessage,
+        onError: (error) {
+          _errorController.add(error);
+          _handleDisconnect();
+        },
+        onDone: _handleDisconnect,
+        cancelOnError: true,
+      );
+    } catch (e) {
+      _errorController.add(e);
+      _handleDisconnect();
+      rethrow;
+    }
+  }
+
+  void _handleDisconnect() {
+    if (_connected) {
+      _connected = false;
+      _connectionController.add(WebSocketConnectionState.disconnected);
+    }
   }
 
   /// Creates a WebSocketService using WS_PASSWORD env and optional URL.
-  factory WebSocketService.fromEnv({String url = 'ws://localhost:8080/ws'}) {
+  factory WebSocketService.fromEnv() {
     final env = DotEnv(includePlatformEnvironment: true)..load();
     final token = env['WS_PASSWORD'] ?? 'changeme';
-    final uri = Uri.parse('$url?token=$token');
-    final channel = IOWebSocketChannel.connect(uri);
-    return WebSocketService._(channel);
+    return WebSocketService._(env['WS_URL'] ?? 'ws://localhost:8080/ws', token);
+  }
+
+  /// Connect or reconnect to the WebSocket server
+  Future<void> connect() async {
+    if (_connected) return;
+    _connect();
   }
 
   void _handleMessage(dynamic data) {
@@ -86,20 +139,46 @@ class WebSocketService {
 
   /// Sends a JSON request with unique requestId and returns a Future for the response.
   Future<Map<String, dynamic>> sendRequest(Map<String, dynamic> req) {
+    if (!_connected || _channel == null) {
+      return Future.error('Not connected to WebSocket server');
+    }
+
     final rid = _uuid.v4();
     req['requestId'] = rid;
     final completer = Completer<Map<String, dynamic>>();
     _pending[rid] = completer;
-    channel.sink.add(jsonEncode(req));
+    _channel!.sink.add(jsonEncode(req));
+
+    // Set a timeout for the request
+    Future.delayed(const Duration(seconds: 30), () {
+      if (_pending.containsKey(rid)) {
+        _pending
+            .remove(rid)
+            ?.completeError(TimeoutException('Request timed out'));
+      }
+    });
+
     return completer.future;
   }
 
-  void close() {
-    channel.sink.close();
-    _connected = false;
+  Future<void> close() async {
+    try {
+      await _channel?.sink.close();
+    } finally {
+      _connected = false;
+      _channel = null;
+      _connectionController.add(WebSocketConnectionState.disconnected);
+    }
   }
 
   void setConnected(bool connected) {
-    _connected = connected;
+    if (_connected != connected) {
+      _connected = connected;
+      _connectionController.add(
+        connected
+            ? WebSocketConnectionState.connected
+            : WebSocketConnectionState.disconnected,
+      );
+    }
   }
 }
