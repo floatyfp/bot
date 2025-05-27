@@ -1,9 +1,12 @@
 import 'package:bot/services/websocket_service.dart';
+import 'package:dotenv/dotenv.dart';
 import 'package:get_it/get_it.dart';
 import 'package:nyxx/nyxx.dart';
 import 'package:nyxx_commands/nyxx_commands.dart';
 import '../services/cmd_permission_check_service.dart';
 import '../models/permission_level.dart';
+
+final env = DotEnv(includePlatformEnvironment: true)..load();
 
 final editor = ChatGroup(
   'editor',
@@ -298,7 +301,8 @@ final ChatCommand editorEditPost = ChatCommand(
             ButtonBuilder(
                 style: ButtonStyle.link,
                 label: 'Editor',
-                url: Uri.parse('https://localhost:8080/editor?id=$sid'))
+                url: Uri.parse(
+                    'https://${env['HOSTNAME'] ?? '${env['HOSTNAME'] ?? 'localhost:8080'}'}/editor?id=$sid'))
           ])
         ], embeds: [
           EmbedBuilder(
@@ -361,7 +365,8 @@ final ChatCommand editorCreate = ChatCommand(
             ButtonBuilder(
                 style: ButtonStyle.link,
                 label: 'Editor',
-                url: Uri.parse('http://localhost:8080/editor?id=$sid'))
+                url: Uri.parse(
+                    'http://${env['HOSTNAME'] ?? 'localhost:8080'}/editor?id=$sid'))
           ])
         ], embeds: [
           EmbedBuilder(
@@ -449,7 +454,8 @@ final ChatCommand recoverDeploy = ChatCommand(
             ButtonBuilder(
               style: ButtonStyle.link,
               label: 'Editor',
-              url: Uri.parse('http://localhost:8080/editor?id=$sid'),
+              url: Uri.parse(
+                  'http://${env['HOSTNAME'] ?? 'localhost:8080'}/editor?id=$sid'),
             )
           ])
         ], embeds: [

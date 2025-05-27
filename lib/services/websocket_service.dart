@@ -142,7 +142,9 @@ class WebSocketService {
   factory WebSocketService.fromEnv() {
     final env = DotEnv(includePlatformEnvironment: true)..load();
     final token = env['WS_PASSWORD'] ?? 'changeme';
-    return WebSocketService._(env['WS_URL'] ?? 'ws://localhost:8080/ws', token);
+    return WebSocketService._(
+        env['WS_URL'] ?? 'ws://${env['HOSTNAME'] ?? 'localhost:8080'}/ws',
+        token);
   }
 
   /// Connect or reconnect to the WebSocket server

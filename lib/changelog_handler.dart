@@ -1,6 +1,9 @@
+import 'package:dotenv/dotenv.dart';
 import 'package:nyxx/nyxx.dart';
 import 'package:get_it/get_it.dart';
 import 'services/websocket_service.dart';
+
+final env = DotEnv(includePlatformEnvironment: true)..load();
 
 class ChangelogHandler {
   /// Discord user ID to DM
@@ -50,7 +53,8 @@ class ChangelogHandler {
             ButtonBuilder(
                 style: ButtonStyle.link,
                 label: 'Editor',
-                url: Uri.parse('http://localhost:8080/editor?id=$sid')),
+                url: Uri.parse(
+                    'http://${env['HOSTNAME'] ?? 'localhost:8080'}/editor?id=$sid')),
             ButtonBuilder(
                 style: ButtonStyle.danger,
                 label: 'Make Update Required',
