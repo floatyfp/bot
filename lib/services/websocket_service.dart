@@ -5,6 +5,7 @@ import 'package:get_it/get_it.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as ws_status;
 import '../changelog_handler.dart';
 import '../notification_handler.dart';
 
@@ -38,6 +39,14 @@ class WebSocketService {
   final _errorController = StreamController<dynamic>.broadcast();
   Stream<dynamic> get connectionError => _errorController.stream;
 
+  static const _pingInterval = Duration(seconds: 30);
+  Timer? _pingTimer;
+  Timer? _reconnectTimer;
+  bool _manualClose = false;
+  int _reconnectAttempts = 0;
+  static const _maxReconnectAttempts = 5;
+  static const _reconnectDelay = Duration(seconds: 5);
+
   WebSocketService._(this._url, this._token) {
     _connect();
   }
@@ -45,32 +54,84 @@ class WebSocketService {
   void _connect() {
     try {
       final uri = Uri.parse('$_url?token=$_token');
-      _channel = IOWebSocketChannel.connect(uri);
+      _channel = IOWebSocketChannel.connect(
+        uri,
+        pingInterval: _pingInterval,
+      );
       messages = _channel!.stream.asBroadcastStream();
       _connected = true;
+      _reconnectAttempts = 0; // Reset reconnect attempts on successful connection
       _connectionController.add(WebSocketConnectionState.connected);
+
+      // Start ping timer
+      _startPingTimer();
 
       // Listen for messages
       messages.listen(
         _handleMessage,
         onError: (error) {
+          print('WebSocket error: $error');
           _errorController.add(error);
           _handleDisconnect();
         },
-        onDone: _handleDisconnect,
+        onDone: () {
+          print('WebSocket connection closed');
+          _handleDisconnect();
+        },
         cancelOnError: true,
       );
     } catch (e) {
+      print('WebSocket connection error: $e');
       _errorController.add(e);
       _handleDisconnect();
-      rethrow;
     }
+  }
+
+  void _startPingTimer() {
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(_pingInterval, (_) {
+      if (_connected && _channel != null) {
+        try {
+          _channel!.sink.add(jsonEncode({
+            'type': 'ping',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          }));
+        } catch (e) {
+          print('Error sending ping: $e');
+          _handleDisconnect();
+        }
+      }
+    });
   }
 
   void _handleDisconnect() {
     if (_connected) {
       _connected = false;
+      _pingTimer?.cancel();
       _connectionController.add(WebSocketConnectionState.disconnected);
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    if (_manualClose) return;
+    
+    _reconnectTimer?.cancel();
+    
+    if (_reconnectAttempts < _maxReconnectAttempts) {
+      _reconnectAttempts++;
+      final delay = _reconnectDelay * _reconnectAttempts;
+      print('Attempting to reconnect in ${delay.inSeconds} seconds... (Attempt $_reconnectAttempts/$_maxReconnectAttempts)');
+      
+      _reconnectTimer = Timer(delay, () {
+        if (!_connected) {
+          _connectionController.add(WebSocketConnectionState.reconnecting);
+          _connect();
+        }
+      });
+    } else {
+      print('Max reconnection attempts reached');
+      _errorController.add('Failed to reconnect after $_maxReconnectAttempts attempts');
     }
   }
 
@@ -84,7 +145,18 @@ class WebSocketService {
   /// Connect or reconnect to the WebSocket server
   Future<void> connect() async {
     if (_connected) return;
+    _manualClose = false;
     _connect();
+  }
+
+  /// Close the WebSocket connection
+  Future<void> disconnect() async {
+    _manualClose = true;
+    _pingTimer?.cancel();
+    _reconnectTimer?.cancel();
+    await _channel?.sink.close(ws_status.goingAway);
+    _connected = false;
+    _connectionController.add(WebSocketConnectionState.disconnected);
   }
 
   void _handleMessage(dynamic data) {
@@ -95,6 +167,17 @@ class WebSocketService {
     } catch (_) {
       return;
     }
+    
+    // Handle pong response
+    if (msg['type'] == 'pong') {
+      final timestamp = msg['timestamp'] as int?;
+      if (timestamp != null) {
+        final latency = DateTime.now().millisecondsSinceEpoch - timestamp;
+        print('Ping latency: ${latency}ms');
+      }
+      return;
+    }
+    
     final rid = msg['requestId'] as String?;
     if (rid != null && _pending.containsKey(rid)) {
       _pending.remove(rid)!.complete(msg);
