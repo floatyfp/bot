@@ -60,7 +60,8 @@ class WebSocketService {
       );
       messages = _channel!.stream.asBroadcastStream();
       _connected = true;
-      _reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+      _reconnectAttempts =
+          0; // Reset reconnect attempts on successful connection
       _connectionController.add(WebSocketConnectionState.connected);
 
       // Start ping timer
@@ -115,14 +116,15 @@ class WebSocketService {
 
   void _scheduleReconnect() {
     if (_manualClose) return;
-    
+
     _reconnectTimer?.cancel();
-    
+
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
       final delay = _reconnectDelay * _reconnectAttempts;
-      print('Attempting to reconnect in ${delay.inSeconds} seconds... (Attempt $_reconnectAttempts/$_maxReconnectAttempts)');
-      
+      print(
+          'Attempting to reconnect in ${delay.inSeconds} seconds... (Attempt $_reconnectAttempts/$_maxReconnectAttempts)');
+
       _reconnectTimer = Timer(delay, () {
         if (!_connected) {
           _connectionController.add(WebSocketConnectionState.reconnecting);
@@ -131,7 +133,8 @@ class WebSocketService {
       });
     } else {
       print('Max reconnection attempts reached');
-      _errorController.add('Failed to reconnect after $_maxReconnectAttempts attempts');
+      _errorController
+          .add('Failed to reconnect after $_maxReconnectAttempts attempts');
     }
   }
 
@@ -167,17 +170,14 @@ class WebSocketService {
     } catch (_) {
       return;
     }
-    
-    // Handle pong response
-    if (msg['type'] == 'pong') {
-      final timestamp = msg['timestamp'] as int?;
-      if (timestamp != null) {
-        final latency = DateTime.now().millisecondsSinceEpoch - timestamp;
-        print('Ping latency: ${latency}ms');
-      }
+
+    if (msg['type'] == 'ping') {
+      sendRequest({
+        'type': 'pong',
+      });
       return;
     }
-    
+
     final rid = msg['requestId'] as String?;
     if (rid != null && _pending.containsKey(rid)) {
       _pending.remove(rid)!.complete(msg);
