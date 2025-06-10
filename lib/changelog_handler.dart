@@ -23,7 +23,7 @@ class ChangelogHandler {
         final cid = event.interaction.data.customId;
         final id = int.tryParse(cid.split('_')[1]);
         if (id == null) {
-          return event.interaction.respond(
+          return await event.interaction.respond(
             MessageBuilder(content: 'Invalid deployment ID'),
             isEphemeral: true,
           );
@@ -32,7 +32,7 @@ class ChangelogHandler {
           'type': 'set_required',
           'deploymentId': id,
         });
-        return event.interaction.respond(
+        return await event.interaction.respond(
           MessageBuilder(content: 'Deployment #$id marked required'),
           isEphemeral: true,
         );
