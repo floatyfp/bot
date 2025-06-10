@@ -18,19 +18,21 @@ class NotificationHandler {
         final cid = event.interaction.data.customId;
         final id = int.tryParse(cid.split('_')[1]);
         if (id == null) {
-          return await event.interaction.respond(
+          await event.interaction.respond(
             MessageBuilder(content: 'Invalid deployment ID'),
             isEphemeral: true,
           );
+          return;
         }
         await GetIt.I<WebSocketService>().sendRequest({
           'type': 'set_required',
           'deploymentId': id,
         });
-        return await event.interaction.respond(
+        await event.interaction.respond(
           MessageBuilder(content: 'Deployment #$id marked required'),
           isEphemeral: true,
         );
+        return;
       });
     }
   }
