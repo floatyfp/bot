@@ -21,6 +21,7 @@ final ChatCommand restart = ChatCommand(
       MessageBuilder(embeds: [
         EmbedBuilder(
             title: '🔄 Restarting bot...',
+            color: DiscordColor(0x00FF00),
             author: EmbedAuthorBuilder(
                 name: (await context.user.fetch()).username,
                 iconUrl: (await context.user.fetch()).avatar.url),

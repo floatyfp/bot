@@ -46,7 +46,6 @@ class NotificationHandler {
       String? buttonUrl}) async {
     final NyxxGateway bot = GetIt.I<NyxxGateway>();
     try {
-      // Fetch the user and create a DM channel
       final dmChannel = await bot.channels
           .fetch(Snowflake(int.parse(channelId))) as TextChannel;
       await dmChannel.sendMessage(

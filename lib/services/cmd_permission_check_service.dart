@@ -10,7 +10,7 @@ Future<bool> cmdPermissionCheck(
 
   // First update the username if needed
   final userId = context.user.id.toString();
-  final username = '${context.user.username}';
+  final username = context.user.username;
   permissionService.updateUsernameIfNeeded(userId, username);
 
   // Then check permissions

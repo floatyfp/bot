@@ -302,7 +302,7 @@ final ChatCommand editorEditPost = ChatCommand(
                 style: ButtonStyle.link,
                 label: 'Editor',
                 url: Uri.parse(
-                    'https://${env['HOSTNAME'] ?? '${env['HOSTNAME'] ?? 'localhost:8080'}'}/editor?id=$sid'))
+                    'https://${env['HOSTNAME'] ?? env['HOSTNAME'] ?? 'localhost:8080'}/editor?id=$sid'))
           ])
         ], embeds: [
           EmbedBuilder(
